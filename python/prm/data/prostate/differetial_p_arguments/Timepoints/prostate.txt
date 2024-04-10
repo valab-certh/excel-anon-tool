@@ -1,0 +1,7 @@
+Date,1,1,0,True
+Date - PSA 1,1,1,0,True
+Date - PSA 2,1,1,0,True
+Date - PSA 3,1,1,0,True
+Date - PSA 4,1,1,0,True
+Date - PSA 5,1,1,0,True
+Date of biochemical recurrence,1,1,0,True
