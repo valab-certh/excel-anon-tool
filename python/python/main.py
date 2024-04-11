@@ -1,57 +1,48 @@
+from __future__ import annotations
+
 import json
 import os
 import re
 import shutil
+from pathlib import Path
+from typing import Any, Collection
 
 import numpy as np
 import pandas as pd
 
 
-def fix_delete_free_text(value: str) -> float:
-    # Check if the value is a string and has at least two characters
+def fix_delete_free_text(value: str) -> float | None | str:
     checker = 2
     if isinstance(value, str) and len(value) >= checker:
         if value[0].isalpha() and value[1:].isdigit():
-            # Remove the first character
             return float(value[1:])
         if value[0].isalpha() and value[1].isalpha():
             return None
     return value
 
 
-def add_noise(value, epsilon):
-    # Laplace noise generation
+def add_noise(value: float, epsilon: int) -> float:
     scale = 1 / epsilon
-    noise = np.random.laplace(loc=0, scale=scale)
+    noise = np.random.laplace(loc=0, scale=scale)  # noqa: NPY002
     return value + noise
 
 
-def apply_differential_privacy(
-    data: any,
-    columns: list,
+def apply_differential_privacy(  # noqa: C901, PLR0913, PLR0912
+    data: pd.DataFrame,
+    columns: dict[str, Any],
     epsilon: int,
     max_change: int,
     min_value: int,
-    round_value: bool,
+    round_value: bool,  # noqa: FBT001
 ) -> None:
-    
     for column in columns:
         if column in data.columns:
             data[column] = data[column].apply(lambda x: fix_delete_free_text(x))
-
             data[column] = pd.to_numeric(data[column], errors="coerce")
-
             if data[column].dtype.kind in "biufc":
-                # Set sensitivity to max_change to limit the change to max ±max_change
-
                 for i, value in enumerate(data[column]):
-                    if value is not None and not np.isnan(value):
-                        noisy_value = add_noise(
-                            value,
-                            epsilon,
-                        )
-
-                        # Apply max_change if specified
+                    if value is not None and (not np.isnan(value)):
+                        noisy_value = add_noise(value, epsilon)
                         if max_change is not None:
                             if round_value:
                                 while (
@@ -59,61 +50,50 @@ def apply_differential_privacy(
                                     or round(noisy_value) == value
                                 ):
                                     noisy_value = add_noise(value, epsilon)
-
                             else:
                                 while (
                                     abs(noisy_value - value) >= max_change
                                     or noisy_value == value
                                 ):
                                     noisy_value = add_noise(value, epsilon)
-
                             if (
                                 value == 0
                                 and max_change == 1
-                                and min_value == 0
-                                and round_value is True
+                                and (min_value == 0)
+                                and (round_value is True)
                             ):
                                 noisy_value = 1
-
-                        # Apply min_value if specified
                         if min_value is not None:
                             noisy_value = max(noisy_value, min_value)
-
                         if round_value:
                             noisy_value = round(noisy_value)
+                        data.at[i, column] = noisy_value  # noqa: PD008
 
-                        data.at[i, column] = noisy_value
 
-
-def ids_mapping_patient_number(patient_number, data_name, folder_path):
-    ids_mapping = {
-        "123": "456",
-    }
-
-    json_file = os.path.join(folder_path, "id_mapping_" + data_name + ".json")
-    with open(json_file) as f:
+def ids_mapping_patient_number(
+    patient_number: str,
+    data_name: str,
+    folder_path: str,
+) -> str:
+    ids_mapping = {"123": "456"}
+    json_file = Path(folder_path) / ("id_mapping_" + data_name + ".json")
+    with Path.open(json_file) as f:
         json_data = json.load(f)
-
     if (
-        patient_number == np.nan
-        or patient_number == "nan"
+        patient_number == "nan"
         or patient_number == ""
         or (patient_number is None)
-        or patient_number == " "
+        or (patient_number == " ")
     ):
         return patient_number
-
     prefix, suffix = patient_number.split("-")
     if suffix in json_data:
         suffix = json_data[suffix]
-    mapped_prefix = ids_mapping.get(
-        prefix,
-        prefix,
-    )  # Default to original if not found in mapping
+    mapped_prefix = ids_mapping.get(prefix, prefix)
     return f"{mapped_prefix}-{suffix}"
 
 
-def ids_mapping_provider(provider) -> str:
+def ids_mapping_provider(provider: str) -> str:
     ids_mapping = {
         "123": "456",
         "1": "456",
@@ -125,6 +105,7 @@ def ids_mapping_provider(provider) -> str:
         "7": "456",
         "8": "456",
         "9": "456",
+        123: "456",
         1: "456",
         2: "456",
         3: "456",
@@ -135,25 +116,20 @@ def ids_mapping_provider(provider) -> str:
         8: "456",
         9: "456",
     }
-    mapped_provider = ids_mapping.get(
-        provider,
-        provider,
-    )  # Default to original if not found in mapping
+    mapped_provider = ids_mapping.get(provider, provider)
     return f"{mapped_provider}"
 
 
-def ethnicityGrouping(df, columnDescription) -> None:
-    descriptionList = list(columnDescription)
+def ethnicity_grouping(df: pd.DataFrame, column_description: str) -> None:
+    description_list = list(column_description)
     found_irish = [
         element
-        for element in descriptionList
+        for element in description_list
         if isinstance(element, str) and "Irish" in element
     ]
     flag = False
-
     if found_irish:
         flag = True
-
     ethnicity_mapping = {
         1: "White",
         2: "White",
@@ -179,7 +155,6 @@ def ethnicityGrouping(df, columnDescription) -> None:
         "11": "Other",
         "Greek": "White",
     }
-
     if flag:
         ethnicity_mapping = {
             1: "White",
@@ -208,50 +183,43 @@ def ethnicityGrouping(df, columnDescription) -> None:
             "12": "Other",
             "Greek": "White",
         }
-
-    # Step 3: Replace values in the 'Ethnicity' column using the mapping dictionary
     df["Ethnicity"] = df["Ethnicity"].replace(ethnicity_mapping)
 
 
-def split_string(s):
-    # Define a pattern that includes various delimiters: commas, semicolons, slashes, spaces, etc.
-    pattern = r"[,;/]+"
-    # Split the string based on the pattern and filter out any empty strings
+def split_string(s: str) -> list[str]:
+    pattern = "[,;/]+"
     return [word.strip() for word in re.split(pattern, s) if word.strip()]
 
 
-def process_string(input_str):
-    pattern = r"^[A-Za-z]\d\d[A-Za-z]{2}(\d{1,2})?$"
+def process_string(input_str: str) -> str:
+    pattern = "^[A-Za-z]\\d\\d[A-Za-z]{2}(\\d{1,2})?$"
     star_space_flag = False
     end_space_flag = False
     input_str = input_str.strip()
     substrings = split_string(input_str)
     processed_substrings = []
-
-    for substring in substrings:
-        if substring.startswith(" "):
+    for sub in substrings:
+        modified_sub = sub
+        if sub.startswith(" "):
             star_space_flag = True
-            substring = substring.lstrip()
-        if substring.endswith(" "):
+            modified_sub = sub.lstrip()
+        if sub.endswith(" "):
             end_space_flag = True
-            substring = substring.rstrip()
-
-        if bool(re.match(pattern, substring)):
-            level_up_substring = substring
-            if len(substring) == 7:
-                level_up_substring = substring[:-2]
+            modified_sub = modified_sub.rstrip()
+        if bool(re.match(pattern, modified_sub)):
+            level_up_substring = modified_sub
+            if len(modified_sub) == 7:  # noqa: PLR2004
+                level_up_substring = modified_sub[:-2]
                 if star_space_flag:
                     level_up_substring = " " + level_up_substring
                 if end_space_flag:
                     level_up_substring = level_up_substring + " "
-
             processed_substrings.append(level_up_substring)
-
     return ",".join(processed_substrings)
 
 
-def medicationLevelUp(cancerType, df) -> None:
-    if cancerType == "breast":
+def medication_levelup(cancer_type: str, df: pd.DataFrame) -> None:  # noqa: C901
+    if cancer_type == "breast":
         columns_to_check = [
             "Medications",
             "Type of CTX",
@@ -266,15 +234,13 @@ def medicationLevelUp(cancerType, df) -> None:
             if column in df.columns:
                 df[column] = df[column].astype(str)
                 df[column] = df[column].apply(process_string)
-
-    if cancerType == "colorectal":
+    if cancer_type == "colorectal":
         columns_to_check = ["Type of CT", "Type of CRT", "Type of CIT"]
         for column in columns_to_check:
             if column in df.columns:
                 df[column] = df[column].astype(str)
                 df[column] = df[column].apply(process_string)
-
-    if cancerType == "lung":
+    if cancer_type == "lung":
         columns_to_check = [
             "Type of CT",
             "Type of CRT",
@@ -286,8 +252,7 @@ def medicationLevelUp(cancerType, df) -> None:
             if column in df.columns:
                 df[column] = df[column].astype(str)
                 df[column] = df[column].apply(process_string)
-
-    if cancerType == "prostate":
+    if cancer_type == "prostate":
         columns_to_check = ["Medications"]
         for column in columns_to_check:
             if column in df.columns:
@@ -295,33 +260,38 @@ def medicationLevelUp(cancerType, df) -> None:
                 df[column] = df[column].apply(process_string)
 
 
-def all_values_match(s, pattern):
-    values = re.split(r",|;|/", s)
-    return all(re.match(pattern, value) for value in values)
+def remove_dot_and_digit(input_string: str | list[str]) -> str | list[str]:
+    if isinstance(input_string, str):
+        input_string = input_string.strip()
+        substrings = input_string.split(",")
+        pattern = r"[A-Za-z]\d{2}(\.\d+)?$"
+        processed_substrings = [
+            substring for substring in substrings if re.match(pattern, substring)
+        ]
+        processed_substrings = [
+            re.sub(r"\.\d", "", substring) for substring in processed_substrings
+        ]
+        return ",".join(processed_substrings)
+
+    processed_strings = []
+    for item in input_string:
+        string = item.strip()
+        pattern = r"[A-Za-z]\d{2}(\.\d+)?$"
+        if re.match(pattern, string):
+            processed_string = re.sub(r"\.\d", "", string)
+            processed_strings.append(processed_string)
+    return processed_strings
 
 
-def remove_dot_and_digit(input_string):
-    input_string = str(input_string)
-    processed_substrings = []
-    input_string = input_string.strip()
-    substrings = split_string(input_string)
-    pattern = r"[A-Za-z]\d{2}(\.\d)?$"
-
-    for substring in substrings:
-        if re.match(pattern, substring):
-            processed_substrings.append(substring)
-
-    substrings = ",".join(processed_substrings)
-
-    if type(substrings) == int or substrings is None or substrings == "":
-        return substrings
-    return re.sub(r"\.\d", "", substrings)
-
-
-def calculate_jaccard_similarity(dfOriginal, dfAnonymized, data_name, sheat):
+def calculate_jaccard_similarity(  # noqa: C901, PLR0912
+    df_original: pd.DataFrame,
+    df_anonymized: pd.DataFrame,
+    data_name: str,
+    sheat: str,
+) -> float | None:
     qi = []
     if sheat == "General info":
-        if "Ethnicity" in dfOriginal.columns:
+        if "Ethnicity" in df_original.columns:
             if data_name == "breast":
                 qi = ["Medical History", "Ethnicity", "Medications"]
             if data_name == "colorectal":
@@ -339,7 +309,6 @@ def calculate_jaccard_similarity(dfOriginal, dfAnonymized, data_name, sheat):
                 qi = ["Medical History"]
             if data_name == "prostate":
                 qi = ["Medical History", "Medications"]
-
     if sheat == "Treatment":
         if data_name == "breast":
             qi = [
@@ -361,22 +330,20 @@ def calculate_jaccard_similarity(dfOriginal, dfAnonymized, data_name, sheat):
                 "Type of TT",
                 "Type of IT",
             ]
-
     if qi:
-        dfAnonymized = dfAnonymized.replace("nan", np.nan)
-        categories1 = set(dfOriginal[qi].astype(str).values.flatten())
-        categories2 = set(dfAnonymized[qi].astype(str).values.flatten())
-
+        df_anonymized = df_anonymized.replace("nan", np.nan)
+        categories1 = set(df_original[qi].astype(str).values.flatten())  # noqa: PD011
+        categories2 = set(df_anonymized[qi].astype(str).values.flatten())  # noqa: PD011
         intersection = len(categories1.intersection(categories2))
         union = len(categories1.union(categories2))
-
         return intersection / union if union != 0 else 0
-
     return None
 
 
-def calculate_generalization_level(original_df, anonymized_df) -> None:
-    # column_name = "Medications"
+def calculate_generalization_level(
+    original_df: pd.DataFrame,
+    anonymized_df: pd.DataFrame,
+) -> None:
     columns = [
         "Medical History",
         "Ethnicity",
@@ -396,219 +363,117 @@ def calculate_generalization_level(original_df, anonymized_df) -> None:
             anonymized_df[column_name] = (
                 anonymized_df[column_name].fillna("").astype(str)
             )
-
-            valuesOr = {
+            values_or = {
                 item.strip()
                 for sublist in original_df[column_name].str.split(",")
                 for item in sublist
             }
-            valuesAn = {
+            values_an = {
                 item.strip()
                 for sublist in anonymized_df[column_name].str.split(",")
                 for item in sublist
             }
-
-            # Calculating metrics
-            common_values = valuesOr.intersection(valuesAn)
-            exclusive_values_original = valuesOr - valuesAn
-            exclusive_values_anonymized = valuesAn - valuesOr
-
-            total_unique_values_original = len(valuesOr)
-            total_unique_values_anonymized = len(valuesAn)
+            common_values = values_or.intersection(values_an)
+            exclusive_values_original = values_or - values_an
+            exclusive_values_anonymized = values_an - values_or
+            total_unique_values_original = len(values_or)
+            total_unique_values_anonymized = len(values_an)
             common_values_count = len(common_values)
             len(exclusive_values_original)
             exclusive_anonymized_count = len(exclusive_values_anonymized)
-
-            (
-                (common_values_count / total_unique_values_anonymized) * 100
-                if total_unique_values_anonymized
-                else 0
-            )
-            (
-                (common_values_count / total_unique_values_original) * 100
-                if total_unique_values_original
-                else 0
-            )
-            (
-                (exclusive_anonymized_count / total_unique_values_anonymized) * 100
-                if total_unique_values_anonymized
-                else 0
-            )
+            common_values_count / total_unique_values_anonymized * 100 if total_unique_values_anonymized else 0  # noqa: E501
+            common_values_count / total_unique_values_original * 100 if total_unique_values_original else 0  # noqa: E501
+            exclusive_anonymized_count / total_unique_values_anonymized * 100 if total_unique_values_anonymized else 0  # noqa: E501
 
 
-def read_differentialArguments(differential_pr_arguments):
-    columns = []
-
-    for c in differential_pr_arguments:
-        columns.append(c)
-
-    return {
-        "columns": columns,
-    }
+def read_differential_arguments(
+    differential_pr_arguments: Collection[str],
+) -> dict[str, Any]:
+    columns = list(differential_pr_arguments)
+    return {"columns": columns}
 
 
-def convert_columns_to_indexes(data, columnsNames):
-    if columnsNames is None:
-        return None
-
-    return [data.columns.get_loc(col) for col in columnsNames]
-
-
-def extract_columns_from_hierarchies(folder_path):
-    # Get the list of files in the folder
-    files = os.listdir(folder_path)
-
-    # Initialize an empty list to store the extracted strings
-    columnsNames = []
-
-    # Flag to check if there are CSV files in the folder
-    csv_files_exist = False
-
-    # Iterate through each file
-    for file_name in files:
-        # Check if the file is a CSV file
-        if file_name.endswith(".csv"):
-            csv_files_exist = True
-            # Split the file name by "_"
-            parts = file_name.split("_")
-
-            # If there is more than one part after splitting, take the last part
-            if len(parts) > 1:
-                last_part = parts[-1]
-
-                # Remove the ".csv" extension and add the extracted string to the list
-                columnsNames.append(last_part[:-4])
-
-    # If no CSV files were found, return None
-    if not csv_files_exist:
-        return None
-
-    return columnsNames
+def get_cancer_type(value: str) -> str:
+    if value is not None:
+        lowercase_value = value.lower()
+        cancer_types = ["breast", "colorectal", "lung", "prostate"]
+        for cancer_type in cancer_types:
+            if cancer_type.lower() in lowercase_value:
+                return cancer_type
+    return ""
 
 
-def find_csv_file(folder_path, file_names):
-    """
-    Search for CSV files in a folder and return the names of files that match the given list of names.
-
-    Parameters:
-    - folder_path (str): The path to the folder containing CSV files.
-    - file_names (list): A list of strings representing the names to search for.
-
-    Returns:
-    - list: A list of CSV file names that were found in the folder.
-    """
-
-    # Get a list of files in the folder
-    files_in_folder = os.listdir(folder_path)
-
-    # Filter files that are CSV files and match the given names
-    return [
-        file_name
-        for file_name in files_in_folder
-        if file_name.endswith(".csv") and file_name in file_names
-    ]
-
-
-def get_cancer_type(value):
-    cancer_types = ["breast", "colorectal", "lung", "prostate"]
-
-    # Convert the input value to lowercase for case-insensitive comparison
-    lowercase_value = value.lower()
-
-    # Check if any cancer type is present in the lowercase version of the value
-    for cancer_type in cancer_types:
-        if cancer_type.lower() in lowercase_value:
-            return cancer_type
-
-    # If no match is found, return None or any other value you prefer
-    return None
-
-
-def skip_rows_array(value):
+def skip_rows_array(value: str) -> list[int]:
     length = len(value)
     result = list(range(length + 1))
-
     result.append(length + 2)
-
     return result
 
 
-def findPatienNumber(header_row, df):
+def find_patien_number(
+    header_row: list[str],
+    df: pd.DataFrame,
+) -> tuple[bool, str, str]:
     flag = False
-    columnDiscription = ""
-    unwantedRows = ""
-
+    column_discription = ""
+    unwanted_rows = ""
     if "Patient Number*" in header_row or "Patient Number" in header_row:
-        columnDiscription = df.iloc[0].values
+        column_discription = df.iloc[0].values  # noqa: PD011
     elif (
-        "Patient Number*" in df.iloc[:1].values
-        or "Patient Number" in df.iloc[:1].values
+        "Patient Number*" in df.iloc[:1].values  # noqa: PD011
+        or "Patient Number" in df.iloc[:1].values  # noqa: PD011
     ):
         flag = True
-        columnDiscription = df.iloc[1].values
+        column_discription = df.iloc[1].values  # noqa: PD011
     else:
         for i in range(10):
-            row = df.iloc[:i].values
+            row = df.iloc[:i].values  # noqa: PD011
             if "Patient Number*" in row or "Patient Number" in row:
-                unwantedRows = df.iloc[: i - 1].values
-                columnDiscription = df.iloc[i].values
+                unwanted_rows = df.iloc[: i - 1].values  # noqa: PD011
+                column_discription = df.iloc[i].values  # noqa: PD011
                 break
-    return flag, columnDiscription, unwantedRows
+    return (flag, column_discription, unwanted_rows)
 
 
 class Anonymizer:
-    def __init__(
-        self,
-        excel_path=None,
-        sheat_Name=None,
-        data_name=None,
-        sheat=None,
-        folder_path=None,
-        data_provider=None,
+    def __init__(  # noqa: C901, PLR0913, PLR0912, PLR0915
+        self: Anonymizer,
+        excel_path: Path,
+        sheat_name: str,
+        data_name: str,
+        sheat: str,
+        folder_path: str,
+        data_provider: str,
     ) -> None:
-        self.sheat_Name = sheat_Name
+        self.sheat_name = sheat_name
         self.excelName = data_name
         self.data_name = get_cancer_type(data_name)
-        self.fileName = self.excelName + "-" + self.sheat_Name + "-anonymized.xlsx"
-        self.dataProvider = data_provider
-
-        # Dataset path
-        xlxs_Path = excel_path
-        # Data path
-        self.path = os.path.join("prm/data", self.data_name)  # trailing /
-
-        # keep the header and the second row
-        df = pd.read_excel(xlxs_Path, sheet_name=sheat)
-
+        self.fileName = self.excelName + "-" + self.sheat_name + "-anonymized.xlsx"
+        self.data_provider = data_provider
+        xlxs_path = excel_path
+        datframe = pd.read_excel(xlxs_path, sheet_name=sheat)
         column_indices_with_value = [
             i
-            for i, column in enumerate(df.columns)
-            if df[column].eq("Year of birth").any()
+            for i, column in enumerate(datframe.columns)
+            if datframe[column].eq("Year of birth").any()
         ]
-
-        column_name_to_drop = df.columns[column_indices_with_value]
-        df = df.drop(column_name_to_drop, axis=1)
-
-        self.header_row = df.columns.tolist()
-
-        self.flag, self.columnDiscription, self.unwantedRows = findPatienNumber(
+        column_name_to_drop = datframe.columns[column_indices_with_value]
+        datframe = datframe.drop(column_name_to_drop, axis=1)
+        self.header_row = datframe.columns.tolist()
+        self.flag, self.column_discription, self.unwanted_rows = find_patien_number(
             self.header_row,
-            df,
+            datframe,
         )
-
-        if len(self.unwantedRows) == 0 and self.flag is False:
-            skipRows = [1]
+        if len(self.unwanted_rows) == 0 and self.flag is False:
+            skip_rows = [1]
         elif self.flag is True:
-            skipRows = [0, 2]
+            skip_rows = [0, 2]
         else:
-            skipRows = skip_rows_array(self.unwantedRows)
-
-        del df
-        df = pd.read_excel(xlxs_Path, skiprows=skipRows, sheet_name=sheat)
-
-        if sheat == "General info" and "Year of birth" in df.columns:
-            df = df.drop("Year of birth", axis=1)
-
+            skip_rows = skip_rows_array(self.unwanted_rows)
+        del datframe
+        datframe = pd.read_excel(xlxs_path, skiprows=skip_rows, sheet_name=sheat)
+        if sheat == "General info" and "Year of birth" in datframe.columns:
+            datframe = datframe.drop("Year of birth", axis=1)
         differential_pr_arguments = {
             "breast": {
                 "Baseline": {},
@@ -620,11 +485,7 @@ class Anonymizer:
                     "Date*",
                 },
                 "Lab_Results": {"Date*Date"},
-                "Timepoints": {
-                    " Date*",
-                    "Date",
-                    "Delivery Time",
-                },
+                "Timepoints": {" Date*", "Date", "Delivery Time"},
                 "Treatment": {
                     "Date of Surgery",
                     "Date of CTX",
@@ -639,16 +500,9 @@ class Anonymizer:
             "colorectal": {
                 "Baseline": {},
                 "General_info": {"Age at diagnosis", "Delivery Time"},
-                "Histology_Mutations": {
-                    "Biopsy Date*",
-                    "Surgery Date",
-                },
+                "Histology_Mutations": {"Biopsy Date*", "Surgery Date"},
                 "Lab_Results": {"Date*Date"},
-                "Timepoints": {
-                    "Date*",
-                    "Date",
-                    "Delivery Time",
-                },
+                "Timepoints": {"Date*", "Date", "Delivery Time"},
                 "Treatment": {
                     "Date of surgery",
                     "Date of last CT",
@@ -666,16 +520,9 @@ class Anonymizer:
                     "age quitting smoking",
                     "Delivery Time",
                 },
-                "Histology_Mutations": {
-                    "Biopsy Date*",
-                    "Surgery Date",
-                },
+                "Histology_Mutations": {"Biopsy Date*", "Surgery Date"},
                 "Lab_Results": {"Date*Date"},
-                "Timepoints": {
-                    "Date*",
-                    "Date",
-                    "Delivery Time",
-                },
+                "Timepoints": {"Date*", "Date", "Delivery Time"},
                 "Treatment": {
                     "Surgery Date",
                     "Date of last CT",
@@ -710,177 +557,143 @@ class Anonymizer:
                 },
             },
         }
-
-        differentialPrParams = read_differentialArguments(
-            differential_pr_arguments[self.data_name][sheat_Name],
+        differential_pr_params = read_differential_arguments(
+            differential_pr_arguments[self.data_name][sheat_name],
         )
-        if differentialPrParams is not None:
-            columns_list = differentialPrParams["columns"]
-            apply_differential_privacy(
-                df,
-                columns_list,
-                1,
-                1,
-                0,
-                True,
+        if differential_pr_params is not None:
+            columns_list = differential_pr_params["columns"]
+            apply_differential_privacy(datframe, columns_list, 1, 1, 0, True)  # noqa: FBT003
+        df_original = datframe.copy()
+        medication_levelup(self.data_name, datframe)
+        if "Medical History" in datframe.columns:
+            datframe["Medical History"] = datframe["Medical History"].fillna("")
+            datframe["Medical History"] = datframe["Medical History"].apply(
+                remove_dot_and_digit,
             )
-
-        dfOriginal = df.copy()
-        medicationLevelUp(self.data_name, df)
-
-        if "Medical History" in df.columns:
-            df["Medical History"] = df["Medical History"].fillna("")
-
-            df["Medical History"] = df["Medical History"].apply(remove_dot_and_digit)
-            df["Medical History"] = df["Medical History"].replace("", np.nan)
-
-        if (sheat == "General info") and "Ethnicity" in df.columns:
-            ethnicityGrouping(df, self.columnDiscription)
-
-        if "Patient Number*" in df.columns:
-            df["Patient Number*"] = df["Patient Number*"].astype(str)
-            df["Patient Number*"] = df["Patient Number*"].apply(
+            datframe["Medical History"] = datframe["Medical History"].replace(
+                "",
+                np.nan,
+            )
+        if sheat == "General info" and "Ethnicity" in datframe.columns:
+            ethnicity_grouping(datframe, self.column_discription)
+        if "Patient Number*" in datframe.columns:
+            datframe["Patient Number*"] = datframe["Patient Number*"].astype(str)
+            datframe["Patient Number*"] = datframe["Patient Number*"].apply(
                 ids_mapping_patient_number,
                 data_name=self.data_name,
                 folder_path=folder_path,
             )
-
-        if "Patient Number" in df.columns:
-            df["Patient Number"] = df["Patient Number"].astype(str)
-            df["Patient Number"] = df["Patient Number"].apply(
+        if "Patient Number" in datframe.columns:
+            datframe["Patient Number"] = datframe["Patient Number"].astype(str)
+            datframe["Patient Number"] = datframe["Patient Number"].apply(
                 ids_mapping_patient_number,
                 data_name=self.data_name,
                 folder_path=folder_path,
             )
-
-        if (sheat == "General info") and "Provider*" in df.columns:
-            df["Provider*"] = df["Provider*"].apply(ids_mapping_provider)
-
-        if (sheat == "General info") and "Provider" in df.columns:
-            df["Provider"] = df["Provider"].apply(ids_mapping_provider)
-
-        dfAnonymized = df.copy()
+        if sheat == "General info" and "Provider*" in datframe.columns:
+            datframe["Provider*"] = datframe["Provider*"].apply(ids_mapping_provider)
+        if sheat == "General info" and "Provider" in datframe.columns:
+            datframe["Provider"] = datframe["Provider"].apply(ids_mapping_provider)
+        df_anonymized = datframe.copy()
         jaccard_similarity = calculate_jaccard_similarity(
-            dfOriginal,
-            dfAnonymized,
+            df_original,
+            df_anonymized,
             self.data_name,
             sheat,
         )
         if jaccard_similarity:
             pass
-
-        calculate_generalization_level(dfOriginal, dfAnonymized)
-
+        calculate_generalization_level(df_original, df_anonymized)
         if self.flag is True:
-            headers = df.columns.tolist()
-            df.columns = self.header_row
-            df = pd.concat(
-                [df.iloc[:0], pd.DataFrame([headers], columns=df.columns), df.iloc[0:]],
-            )
-            df = pd.concat(
+            headers = datframe.columns.tolist()
+            datframe.columns = self.header_row
+            datframe = pd.concat(
                 [
-                    df.iloc[:1],
-                    pd.DataFrame([self.columnDiscription], columns=df.columns),
-                    df.iloc[1:],
+                    datframe.iloc[:0],
+                    pd.DataFrame([headers], columns=datframe.columns),
+                    datframe.iloc[0:],
                 ],
             )
-
-        if len(self.unwantedRows) == 0 and self.flag is False:
-            df = pd.concat(
+            datframe = pd.concat(
                 [
-                    df.iloc[:0],
-                    pd.DataFrame([self.columnDiscription], columns=df.columns),
-                    df.iloc[0:],
+                    datframe.iloc[:1],
+                    pd.DataFrame([self.column_discription], columns=datframe.columns),
+                    datframe.iloc[1:],
                 ],
             )
-
-        if len(self.unwantedRows) != 0:
-            headers = df.columns.tolist()
-            df.columns = self.header_row
-
-            df = pd.concat(
-                [df.iloc[:0], pd.DataFrame([headers], columns=df.columns), df.iloc[0:]],
+        if len(self.unwanted_rows) == 0 and self.flag is False:
+            datframe = pd.concat(
+                [
+                    datframe.iloc[:0],
+                    pd.DataFrame([self.column_discription], columns=datframe.columns),
+                    datframe.iloc[0:],
+                ],
             )
-
-            for i in range(len(self.unwantedRows)):
-                df = pd.concat(
+        if len(self.unwanted_rows) != 0:
+            headers = datframe.columns.tolist()
+            datframe.columns = self.header_row
+            datframe = pd.concat(
+                [
+                    datframe.iloc[:0],
+                    pd.DataFrame([headers], columns=datframe.columns),
+                    datframe.iloc[0:],
+                ],
+            )
+            for i in range(len(self.unwanted_rows)):
+                datframe = pd.concat(
                     [
-                        df.iloc[:i],
-                        pd.DataFrame([self.unwantedRows[i]], columns=df.columns),
-                        df.iloc[i:],
+                        datframe.iloc[:i],
+                        pd.DataFrame([self.unwanted_rows[i]], columns=datframe.columns),
+                        datframe.iloc[i:],
                     ],
                 )
-
-            df = pd.concat(
+            datframe = pd.concat(
                 [
-                    df.iloc[: len(self.unwantedRows) + 1],
-                    pd.DataFrame([self.columnDiscription], columns=df.columns),
-                    df.iloc[len(self.unwantedRows) + 1 :],
+                    datframe.iloc[: len(self.unwanted_rows) + 1],
+                    pd.DataFrame([self.column_discription], columns=datframe.columns),
+                    datframe.iloc[len(self.unwanted_rows) + 1 :],
                 ],
             )
 
-        # folder for all results
-        pre_res_folder = os.path.join("results", self.data_name)
-
-        res_folder = os.path.join(pre_res_folder, self.dataProvider)
-
-        # path for anonymized datasets
+        pre_res_folder = Path("results") / self.data_name
+        res_folder = Path(pre_res_folder) / self.data_provider
         self.anon_folder = res_folder
         self.fold = folder_path
+        self.resultFilename = Path(self.anon_folder) / self.fileName
+        Path(self.anon_folder).mkdir(parents=True, exist_ok=True)
+        datframe.to_excel(self.resultFilename, sheet_name=sheat, index=False)
 
-        # name for result file
-        self.resultFilename = os.path.join(self.anon_folder, self.fileName)
-
-        os.makedirs(self.anon_folder, exist_ok=True)
-
-        df.to_excel(self.resultFilename, sheet_name=sheat, index=False)
-
-    def xlsx_to_excel(self, excel_sheets) -> None:
-        output_path = os.path.join(self.fold, self.excelName + "_anonymized" + ".xls")
+    def xlsx_to_excel(self: Anonymizer, excel_sheets: dict[str, str]) -> None:
+        output_path = Path(self.fold) / (self.excelName + "_anonymized" + ".xls")
         excel_writer = pd.ExcelWriter(output_path, engine="xlsxwriter")
-
         for xlsx_file in os.listdir(self.anon_folder):
             if "anonymized" in xlsx_file:
                 file_name = xlsx_file.split("-")[1]
-
                 replacement_key = next(
                     (key for key, value in excel_sheets.items() if value == file_name),
                     None,
                 )
                 if replacement_key:
                     file_name = replacement_key
-
                 if xlsx_file.endswith(".xlsx"):
-                    # Read the Excel file
-                    df = pd.read_excel(os.path.join(self.anon_folder, xlsx_file))
-                    df.to_excel(excel_writer, sheet_name=file_name, index=False)
+                    dataframe = pd.read_excel(Path(self.anon_folder) / xlsx_file)
+                    dataframe.to_excel(excel_writer, sheet_name=file_name, index=False)
+        excel_writer._save()  # noqa: SLF001
 
-        # Save the Excel file
-        excel_writer._save()
-
-    def delete_files(self, names_to_delete) -> None:
-        # Get the list of files in the folder
+    def delete_files(self: Anonymizer, names_to_delete: set[str]) -> None:
         files = os.listdir(self.anon_folder)
-
-        # Iterate through each file in the folder
         for file_name in files:
-            # Check if the file is an xlsx file and contains any of the specified names
             if file_name.endswith(".xlsx") and any(
                 name in file_name for name in names_to_delete
             ):
-                # Construct the full path to the file
-                file_path = os.path.join(self.anon_folder, file_name)
-
-                # Delete the file
-                os.remove(file_path)
-
+                file_path = Path(self.anon_folder) / file_name
+                Path(file_path).unlink()
         shutil.rmtree("results/")
 
 
-def exec_anonymization(excel_path, folder_path) -> None:
-    dataProvider = excel_path.split("/")[-3]
-
-    excel_Sheats = {
+def exec_anonymization(excel_path: Path, folder_path: str) -> None:
+    data_provider = excel_path.parts[-3]
+    excel_sheats = {
         "General info": "General_info",
         "Timepoints": "Timepoints",
         "Baseline": "Baseline",
@@ -888,7 +701,7 @@ def exec_anonymization(excel_path, folder_path) -> None:
         "Treatment": "Treatment",
         "Lab Results": "Lab_Results",
     }
-    namesToDelete = {
+    names_to_delete = {
         "General_info",
         "Timepoints",
         "Baseline",
@@ -896,28 +709,23 @@ def exec_anonymization(excel_path, folder_path) -> None:
         "Treatment",
         "Lab_Results",
     }
-
     sheats_names = pd.ExcelFile(excel_path).sheet_names
-
-    excel_file_name = os.path.splitext(os.path.basename(excel_path))[0]
-
+    excel_file_name = Path(excel_path).name.split(".")[0]
     for sheat_name in sheats_names:
-        sheat = excel_Sheats[sheat_name]
+        sheat = excel_sheats[sheat_name]
         anonymizer = Anonymizer(
             excel_path=excel_path,
-            sheat_Name=sheat,
+            sheat_name=sheat,
             data_name=excel_file_name,
             sheat=sheat_name,
             folder_path=folder_path,
-            data_provider=dataProvider,
+            data_provider=data_provider,
         )
-
-    anonymizer.xlsx_to_excel(excel_sheets=excel_Sheats)
-    anonymizer.delete_files(names_to_delete=namesToDelete)
+    anonymizer.xlsx_to_excel(excel_sheets=excel_sheats)
+    anonymizer.delete_files(names_to_delete=names_to_delete)
 
 
 def anonymize_excel(folder_path: str) -> None:
-    folder_path = os.path.join(folder_path, "data")
     cancer_types = ["breast", "colorectal", "lung", "prostate"]
     excel_suffixes = [
         "_cancer.xls",
@@ -936,7 +744,7 @@ def anonymize_excel(folder_path: str) -> None:
     ]
     for filename in os.listdir(folder_path):
         if filename.lower() in possible_file_names:
-            file_path = os.path.join(folder_path, filename)
+            file_path = Path(folder_path) / filename
             exec_anonymization(file_path, folder_path)
 
 
@@ -947,4 +755,4 @@ def main_cli() -> None:
 
 
 if __name__ == "__main__":
-    anonymize_excel("prm/samples/valab")
+    anonymize_excel("prm/samples/valab/data")
