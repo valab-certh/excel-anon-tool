@@ -13,7 +13,7 @@ cd $HOME/https://github.com/valab-certh/anonymize-excel/
 cd python/ && make STAGING=1
 
 # Installation
-pip install https://api.github.com/repos/valab-certh/anonymize-excel/tarball/main#subdirectory=python/python
+pip install https://api.github.com/repos/valab-certh/anonymize-excel/tarball/main#subdirectory=python
 
 # Usage
 anonymize_excel "python/prm/samples/valab/data"
