@@ -26,7 +26,7 @@ jobs:
         with:
           name: anonymize-excel-windows
           path: python/tmp/dist/anonymize-excel.exe
-    make-macos:
+  make-macos:
     runs-on: macos-14
     steps:
       - name: Set up Git repository
