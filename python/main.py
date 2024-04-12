@@ -38,7 +38,7 @@ def main() -> None:
                 "--distpath",
                 "tmp/dist",
                 "--name",
-                "anonymize_excel",
+                "anonymize-excel",
                 "--runtime-hook",
                 "prm/runtime_hook.py",
                 "--onefile",

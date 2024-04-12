@@ -23,8 +23,8 @@ def fix_delete_free_text(value: str) -> float | None | str:
 
 def add_noise(value: float, epsilon: int) -> float:
     scale = 1 / epsilon
-    noise = np.random.laplace(loc=0, scale=scale)  # noqa: NPY002
-    return value + noise
+    noise: float = np.random.laplace(loc=0, scale=scale)  # noqa: NPY002
+    return (value + noise)
 
 
 def apply_differential_privacy(  # noqa: C901, PLR0913, PLR0912
