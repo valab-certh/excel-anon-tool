@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import unittest
 from pathlib import Path
 from typing import Any, Collection
 
@@ -24,7 +25,7 @@ def fix_delete_free_text(value: str) -> float | None | str:
 def add_noise(value: float, epsilon: int) -> float:
     scale = 1 / epsilon
     noise: float = np.random.laplace(loc=0, scale=scale)  # noqa: NPY002
-    return (value + noise)
+    return value + noise
 
 
 def apply_differential_privacy(  # noqa: C901, PLR0913, PLR0912
@@ -746,6 +747,31 @@ def anonymize_excel(folder_path: str) -> None:
         if filename.lower() in possible_file_names:
             file_path = Path(folder_path) / filename
             exec_anonymization(file_path, folder_path)
+    unittest.main()
+
+
+class Tests(unittest.TestCase):
+    def get_patient_number(self: Tests, xls_file: str) -> str | None:
+        dataframe = pd.read_excel(xls_file, sheet_name="General info", header=None)
+        patient_number = None
+        for index, row in dataframe.iterrows():
+            for col_idx, cell_value in enumerate(row):
+                if cell_value == "Patient Number*":
+                    patient_number = dataframe.iloc[index + 2, col_idx]
+                    break
+        return patient_number
+
+    def test_patient_number_anonymized(self: Tests) -> None:
+        original_xls_file = "prm/samples/valab/data/Breast_Cancer.xls"
+        anonymized_xls_file = "prm/samples/valab/data/Breast_Cancer_anonymized.xls"
+
+        original_patient_number = self.get_patient_number(original_xls_file)
+        anonymized_patient_number = self.get_patient_number(anonymized_xls_file)
+
+        if original_patient_number == "123-456789":
+            raise AssertionError
+        if anonymized_patient_number == "456-901256":
+            raise AssertionError
 
 
 def main_cli() -> None:
