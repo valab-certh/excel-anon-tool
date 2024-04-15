@@ -666,20 +666,26 @@ class Anonymizer:
 
     def xlsx_to_excel(self: Anonymizer, excel_sheets: dict[str, str]) -> None:
         output_path = Path(self.fold) / (self.excelName + "_anonymized" + ".xls")
-        excel_writer = pd.ExcelWriter(output_path, engine="xlsxwriter")
-        for xlsx_file in os.listdir(self.anon_folder):
-            if "anonymized" in xlsx_file:
-                file_name = xlsx_file.split("-")[1]
-                replacement_key = next(
-                    (key for key, value in excel_sheets.items() if value == file_name),
-                    None,
-                )
-                if replacement_key:
-                    file_name = replacement_key
-                if xlsx_file.endswith(".xlsx"):
-                    dataframe = pd.read_excel(Path(self.anon_folder) / xlsx_file)
-                    dataframe.to_excel(excel_writer, sheet_name=file_name, index=False)
-        excel_writer._save()  # noqa: SLF001
+        with pd.ExcelWriter(output_path, engine="xlsxwriter") as excel_writer:
+            for xlsx_file in os.listdir(self.anon_folder):
+                if "anonymized" in xlsx_file:
+                    file_name = xlsx_file.split("-")[1]
+                    replacement_key = next(
+                        (
+                            key
+                            for key, value in excel_sheets.items()
+                            if value == file_name
+                        ),
+                        None,
+                    )
+                    if replacement_key:
+                        file_name = replacement_key
+                    if xlsx_file.endswith(".xlsx"):
+                        dataframe = pd.read_excel(Path(self.anon_folder) / xlsx_file)
+                        dataframe.to_excel(
+                            excel_writer, sheet_name=file_name, index=False,
+                        )
+            excel_writer._save()  # noqa: SLF001
 
     def delete_files(self: Anonymizer, names_to_delete: set[str]) -> None:
         files = os.listdir(self.anon_folder)
@@ -710,7 +716,8 @@ def exec_anonymization(excel_path: Path, folder_path: str) -> None:
         "Treatment",
         "Lab_Results",
     }
-    sheats_names = pd.ExcelFile(excel_path).sheet_names
+    with pd.ExcelFile(excel_path) as xls:
+        sheats_names = xls.sheet_names
     excel_file_name = Path(excel_path).name.split(".")[0]
     for sheat_name in sheats_names:
         sheat = excel_sheats[sheat_name]
@@ -747,7 +754,6 @@ def anonymize_excel(folder_path: str) -> None:
         if filename.lower() in possible_file_names:
             file_path = Path(folder_path) / filename
             exec_anonymization(file_path, folder_path)
-    unittest.main()
 
 
 class Tests(unittest.TestCase):
@@ -762,6 +768,7 @@ class Tests(unittest.TestCase):
         return patient_number
 
     def test_patient_number_anonymized(self: Tests) -> None:
+        anonymize_excel("prm/samples/valab/data")
         original_xls_file = "prm/samples/valab/data/Breast_Cancer.xls"
         anonymized_xls_file = "prm/samples/valab/data/Breast_Cancer_anonymized.xls"
 
@@ -781,4 +788,4 @@ def main_cli() -> None:
 
 
 if __name__ == "__main__":
-    anonymize_excel("prm/samples/valab/data")
+    unittest.main()
