@@ -1,4 +1,4 @@
-# Excel Anonymization Tool
+# Anonymize excel
 
 # Requirements
 POSIX Shell & Utilities
@@ -6,8 +6,8 @@ Git
 Docker
 
 # Download
-git clone https://github.com/valab-certh/anonymize-excel $HOME/https://github.com/valab-certh/anonymize-excel
-cd $HOME/https://github.com/valab-certh/anonymize-excel/
+git clone https://github.com/valab-certh/anonymize-excel $HOME/github.com/valab-certh/anonymize-excel
+cd $HOME/github.com/valab-certh/anonymize-excel/
 
 # Staging
 cd python/ && make STAGING=1
