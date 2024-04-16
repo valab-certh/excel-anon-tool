@@ -76,10 +76,27 @@ def ids_mapping_patient_number(
     data_name: str,
     folder_path: str,
 ) -> str:
+    pattern = re.compile(r"^\d+$")
     ids_mapping = {"123": "456"}
-    json_file = Path(folder_path) / ("id_mapping_" + data_name + ".json")
+    json_name = "id_mapping_" + data_name + ".json"
+    json_file = Path(folder_path) / (json_name)
+    if not Path(json_file).exists():
+        msg = f"In {folder_path} file {json_name} does not exists."
+        raise FileNotFoundError(msg)
     with Path.open(json_file) as f:
         json_data = json.load(f)
+        for key, value in json_data.items():
+            if not (isinstance(key, str) and pattern.match(key)):
+                msg = f"Key '{key}' is not a string containing only numbers."
+                raise ValueError(
+                    msg,
+                )
+            if not (isinstance(value, str) and pattern.match(value)):
+                msg = f"Value '{value}' for key '{key}' is not a string containing only numbers."  # noqa: E501
+                raise ValueError(
+                    msg,
+                )
+
     if (
         patient_number == "nan"
         or patient_number == ""
@@ -683,7 +700,9 @@ class Anonymizer:
                     if xlsx_file.endswith(".xlsx"):
                         dataframe = pd.read_excel(Path(self.anon_folder) / xlsx_file)
                         dataframe.to_excel(
-                            excel_writer, sheet_name=file_name, index=False,
+                            excel_writer,
+                            sheet_name=file_name,
+                            index=False,
                         )
             excel_writer._save()  # noqa: SLF001
 
