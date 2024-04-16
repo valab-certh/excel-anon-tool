@@ -771,10 +771,8 @@ class Tests(unittest.TestCase):
         anonymize_excel("prm/samples/valab/data")
         original_xls_file = "prm/samples/valab/data/Breast_Cancer.xls"
         anonymized_xls_file = "prm/samples/valab/data/Breast_Cancer_anonymized.xls"
-
         original_patient_number = self.get_patient_number(original_xls_file)
         anonymized_patient_number = self.get_patient_number(anonymized_xls_file)
-
         if original_patient_number != "123-456789":
             raise AssertionError
         if anonymized_patient_number != "456-901256":
