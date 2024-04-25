@@ -15,8 +15,7 @@ anonymize-excel "python/prm/samples/valab/data"
 # Docker
 
 # Download
-git clone https://github.com/valab-certh/anonymize-excel $HOME/github.com/valab-certh/anonymize-excel
-cd $HOME/github.com/valab-certh/anonymize-excel/
+git clone git@github.com:valab-certh/anonymize-excel ~/github.com/valab-certh/anonymize-excel
 
 # Development
 cd ~/github.com/valab-certh/anonymize-excel/
