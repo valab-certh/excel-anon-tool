@@ -21,4 +21,3 @@ cd $HOME/github.com/valab-certh/anonymize-excel/
 # Development
 cd ~/github.com/valab-certh/anonymize-excel/
 cd python/ && make clean check all && cd ..
-
