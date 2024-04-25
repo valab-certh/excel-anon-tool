@@ -1,9 +1,7 @@
 # Anonymize excel
 
-# Requirements
-POSIX Shell & Utilities
-Git
-Docker
+# Installation requirements
+# Python 3.10+
 
 # Installation
 pip install https://api.github.com/repos/valab-certh/anonymize-excel/tarball/main#subdirectory=python
@@ -11,9 +9,16 @@ pip install https://api.github.com/repos/valab-certh/anonymize-excel/tarball/mai
 # Usage
 anonymize-excel "python/prm/samples/valab/data"
 
+# Development requirements
+# POSIX Shell & Utilities
+# Git
+# Docker
+
 # Download
 git clone https://github.com/valab-certh/anonymize-excel $HOME/github.com/valab-certh/anonymize-excel
 cd $HOME/github.com/valab-certh/anonymize-excel/
 
-# Staging
-cd python/ && make STAGING=1
+# Development
+cd ~/github.com/valab-certh/anonymize-excel/
+cd python/ && make clean check all && cd ..
+

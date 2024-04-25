@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-anonymize-excel = "main:main_cli"
+anonymize-excel = "main:main"
 
 [tool.setuptools]
 py-modules = ["main"]

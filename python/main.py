@@ -81,21 +81,17 @@ def ids_mapping_patient_number(
     json_name = "id_mapping_" + data_name + ".json"
     json_file = Path(folder_path) / (json_name)
     if not Path(json_file).exists():
-        msg = f"In {folder_path} file {json_name} does not exists."
+        msg = f"A json file named  {json_name} should exist in {folder_path}."
         raise FileNotFoundError(msg)
     with Path.open(json_file) as f:
         json_data = json.load(f)
         for key, value in json_data.items():
             if not (isinstance(key, str) and pattern.match(key)):
-                msg = f"Key '{key}' is not a string containing only numbers."
-                raise ValueError(
-                    msg,
-                )
+                msg = f"Key '{key}' should containing only numbers."
+                raise ValueError(msg)
             if not (isinstance(value, str) and pattern.match(value)):
-                msg = f"Value '{value}' for key '{key}' is not a string containing only numbers."  # noqa: E501
-                raise ValueError(
-                    msg,
-                )
+                msg = f"Value '{value}' for key '{key}' should containing only numbers."  # noqa: E501
+                raise ValueError(msg)
 
     if (
         patient_number == "nan"
@@ -798,7 +794,7 @@ class Tests(unittest.TestCase):
             raise AssertionError
 
 
-def main_cli() -> None:
+def main() -> None:
     import fire
 
     fire.Fire(anonymize_excel)
