@@ -26,4 +26,4 @@ jobs:
       - name: Check pip installation
         run: |
           pip install https://api.github.com/repos/valab-certh/anonymize-excel/tarball/main#subdirectory=python
-          anonymize_excel "python/prm/samples/valab"
+          anonymize-excel "python/prm/samples/valab"
